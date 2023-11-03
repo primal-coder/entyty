@@ -1,0 +1,5 @@
+.venv
+dist/
+entyty.egg-info/
+
+__pycache__
