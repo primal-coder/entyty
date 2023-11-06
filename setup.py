@@ -1,9 +1,14 @@
 from setuptools import setup, find_packages
 
+with open("README.md", "r") as file:
+    long_description = file.read()
+
 setup(
     name='entyty',
-    version='0.0.1',
+    version='0.0.42',
     description='A Python library for creating and managing entities.',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author='James Evans',
     author_email='joesaysahoy@gmail.com',
     url='https://github.com/primal-coder/entyty',

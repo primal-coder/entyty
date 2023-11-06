@@ -110,6 +110,11 @@ class AbstractEntity(metaclass=EntityMeta):
         """Set the ID of the entity."""
         if isinstance(entity_id, _UUID):
             self._entity_id = entity_id
+    
+    @property
+    def events(self):
+        """Return the events of the entity."""
+        return self.__class__.events
 
     @property
     def age(self):
@@ -143,7 +148,7 @@ class AbstractEntity(metaclass=EntityMeta):
     def _dispatch_event(self, event_name, *args):
         """Dispatch an event for the entity."""
         if event_type := self.events.get(event_name):
-            self.dispatcher.dispatch_event(event_type, self, *args)
+            self.dispatcher.dispatch_event(event_type, *args)
 
     @_abstractmethod
     def _validate(self):

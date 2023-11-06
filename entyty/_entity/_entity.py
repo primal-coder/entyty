@@ -1,8 +1,9 @@
 from ._base_entity import BaseEntity as _BaseEntity, Scene
-from .__log__ import log
+from ..__log__ import log
 from typing import Optional as _Optional
 
 class Entity(_BaseEntity):
+    dispatcher = _BaseEntity.dispatcher
     log('Initializing entity class.')
     def __init__(
         self,
@@ -22,11 +23,10 @@ class LogicalEntity(_BaseEntity):
 
     def __init__(
             self,
-            scene: _Optional[Scene] = None,
             name: _Optional[str] = None,
     ):
         log(f'Instantiating logical entity {name}.')
-        super().__init__(scene, None, name)
+        super().__init__(None, None, name)
         if self.name is None:
             self.name = self.__class__.__name__.lower()
 
@@ -46,21 +46,6 @@ class VisualEntity(_BaseEntity):
         if self.name is None:
             self.name = self.__class__.__name__.lower()
         self._position = position
-        self._element = None
-
-    @property
-    def element(self):
-        """Return the element of the entity."""
-        return self._element
-
-    @element.setter
-    def element(self, value: _Optional[AbstractElement]):
-        """Set the element of the entity."""
-        self._element = value
-
-    def set_element(self, elem):
-        """Set the element of the entity."""
-        self.element = elem
 
     @property
     def position(self):

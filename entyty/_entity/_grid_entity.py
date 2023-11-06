@@ -14,9 +14,6 @@ def throw_exception(exception_type, message):
     raise exception_type(message)
 
 class AbstractGridEntity(LogicalEntity):
-    # #logger.entityi'Initializing abstract grid entity class.')
-    LogicalEntity._register_event_type('on_occupy')
-    LogicalEntity._register_event_type('on_vacate')
     _parent = None
     _grid = None
     _cell = None
@@ -29,6 +26,7 @@ class AbstractGridEntity(LogicalEntity):
     _movements = None
     _movements_remaining = None
     _movement_queue = None
+    _move_energy = None
     _actions = None
     _is_turn = None
     _vision = None
@@ -62,7 +60,6 @@ class AbstractGridEntity(LogicalEntity):
     def cell(self, cell):
         if cell is not None:
             if self.cell is not None:
-                #logger.entity(f'[{self.name}] ALREADY OCCUPIES A CELL: {self.cell}')
                 return
             self._cell = cell
         elif self.cell is not None:
@@ -96,11 +93,20 @@ class AbstractGridEntity(LogicalEntity):
     @property
     def movements(self):
         if self.speed is not None:
-            return self.speed // 5
-        
+            self._movements = self.speed // 5
+        return self._movements if self._movements is not None else 1
+    
     @movements.setter
     def movements(self, movements):
         self._movements_remaining = movements
+        
+    @property
+    def movements_remaining(self):
+        return self._movements_remaining
+    
+    @movements_remaining.setter
+    def movements_remaining(self, movements_remaining):
+        self._movements_remaining = movements_remaining
         
     @property
     def movement_queue(self):
@@ -114,6 +120,16 @@ class AbstractGridEntity(LogicalEntity):
             movement_queue = []
         self._movement_queue = movement_queue
         
+    @property
+    def move_energy(self):
+        if self._move_energy is None:
+            self._move_energy = self.speed
+        return self._move_energy
+    
+    @move_energy.setter
+    def move_energy(self, move_energy):
+        self._move_energy = move_energy
+
     @property
     def position(self):
         return self.cell.coordinates
@@ -182,7 +198,9 @@ class AbstractGridEntity(LogicalEntity):
                 "Invalid angle",
         )
         
+
 class GridEntity(AbstractGridEntity):
+    _base_move_action = {None: {'direction': None, 'from': None, 'to': None}}
     """A class for an The GridEntity is a subclass of LogicalEntity and is assumed to exist on a grid, and
     has a position, a name, and a scale. The scale is used to determine the size of the entity
     when it is drawn on the screen. The scale is a tuple of two integers, the first being the
@@ -191,16 +209,7 @@ class GridEntity(AbstractGridEntity):
     identifies the entity. The grid is a reference to the grid that the entity exists on. The
     cell is a reference to the cell that the entity is currently occupying. The cell_history is
     a list of all cells that the entity has occupied. The last_cell is a reference to the last
-    cell that the entity occupied. The GridEntity class inherits from the EventDispatcher
-    class, which allows it to dispatch events. The GridEntity class has the following events:
-        
-        on_occupy: Dispatched by the entity before it occupies a cell. The event handler
-        should take one argument, the entity that is going to occupy the cell. The event handler
-        should be a method of the cell that the entity is attempting to occupy(`recv_occupant(occupant)`).
-        
-        on_vacate: Dispatched by the entity when it vacates a cell. The event handler should 
-        take one argument, the entity that is vacating the cell. The event handler should be a
-        method of the cell that the entity is vacating.(`recv_occupant(occupant)`).
+    cell that the entity occupied. 
         
     The GridEntity class has the following methods:
     
@@ -232,24 +241,18 @@ class GridEntity(AbstractGridEntity):
         every frame. The entity's _position on the screen will be reflected after this method
         is called.   
     """
-    LogicalEntity._register_event_type('on_occupy')
-    LogicalEntity._register_event_type('on_vacate')
     def __init__(
             self,
-            scene: _Optional[object] = None,
             grid: _Optional[Grid] = None,
             name: _Optional[str] = None,
             parent: _Optional[object] = None,
             *arg, **kwargs
     ):
-        #logger.entity(f'Initializing grid entity [{name}].')
-        super(GridEntity, self).__init__(scene, name)
+        super(GridEntity, self).__init__(name)
         self.parent = parent
         self.grid = grid
-        #logger.entity(f'[{name}] Finding initial cell.')
         init_cell = self.grid.random_cell(attr=('passable', True))
         self.cell = init_cell
-        #logger.entity(f'[{name}] Initial cell: {self.cell}')
         self.cell_history = []
         self.last_cell = None
         self._width =  self.grid.cell_size*0.8
@@ -257,9 +260,9 @@ class GridEntity(AbstractGridEntity):
         self._path = []
         self._speed = parent.speed if parent is not None else 5
         self._movements_remaining = self.speed // 5
-        self._actions = {'move': {i: {'direction': None, 'from': None, 'to': None} for i in range(self.speed // 5)}}
+        self._actions = {'move': {None:{}}}
+        self._action_history = []
         self.traveling = False
-        #logger.entity(f'[{name}] Occupying init cell - {self.cell.designation}.')
         self.occupy(self.cell)
 
     @property
@@ -269,8 +272,12 @@ class GridEntity(AbstractGridEntity):
     @speed.setter
     def speed(self, value):
         self._speed = value
-        self._movements_remaining = self.speed // 5
-        self._actions = {'move': {i: {'direction': None, 'from': None, 'to': None} for i in range(self.speed // 5)}}
+        self._move_energy = value
+        
+    def end_turn(self):
+        self._action_history.append(self.actions)
+        self.move_energy = self.speed - abs(self.move_energy) if self.move_energy < 0 else self.speed
+        self.actions = {'move': {None:{}}}
 
     def get_path_to(self, destination: object):
         return self.grid.get_path(self.cell_name, destination)
@@ -279,7 +286,6 @@ class GridEntity(AbstractGridEntity):
         return [path[i:i + self.movements] for i in range(0, len(path), self.movements)]
         
     def set_path_to(self, destination: object):
-        #logger.entity(f'[{self.name}] SETTING PATH TO: {destination} FROM: {self.cell} DISTANCE: {self.grid.get_distance(self.cell.designation, destination.designation, "cells")}')
         self.path = self.get_path_to(destination)
         if len(self.path) > self.movements:
             self.movement_queue = list(self.slice_path(self.path))
@@ -288,44 +294,46 @@ class GridEntity(AbstractGridEntity):
         self.traveling = True
     
     def vacate(self):
-        #logger.entity(f'[{self.name}] VACATING CELL: {self.cell}')
-        self.actions.update({'vacate': f'{self.cell.designation}'})
         self.cell.recv_occupant(self)
         self.cell = None
-        # self._pop_handlers()
 
     def occupy(self, cell_to_occupy: object = None):
-        if self.cell is None and cell_to_occupy != self.cell and not cell_to_occupy.occupied or self.last_cell is not None:
-            if self.cell is not None:
-                return
-            if cell_to_occupy.occupied:
-                return
-            #logger.entity(f'[{self.name}] OCCUPYING CELL: {cell_to_occupy}')
-            cell_to_occupy.recv_occupant(self)
+        if self.cell is None and not cell_to_occupy.occupied or self.last_cell is not None:
             self.cell = cell_to_occupy
         self.cell.recv_occupant(self)
         self._push_handlers(on_vacate=self.cell.recv_occupant, on_occupy=self.cell.recv_occupant)
-        self._dispatch_event('on_occupy', self)
-        self.actions.update({'occupy': f'{self.cell.designation}'})
 
     def check_destination(self, cell_to_move_to: object = None):
         if cell_to_move_to is not None:
             return bool(cell_to_move_to.passable)
 
     def move(self, cell_to_move_to: object = None):
-        if self._movements_remaining <= 0:
-            print('No movements remaining')
-            return
+        if self.move_energy <= 0:
+            print('No energy remaining.')
+            return None
         # idx = self.cell.adjacent.index([getattr(self.cell, f'{direction}') for direction in list(_DIRECTION_MAP.values()) if getattr(self.cell, f'{direction}') is cell_to_move_to][0].designation)
         if cell_to_move_to in [self.grid[cell] for cell in self.cell.adjacent]:
-            self.actions['move'][self.movements - self._movements_remaining] = {'direction': f'{list(_DIRECTION_MAP.keys())[self.cell.adjacent.index(cell_to_move_to.designation)]}', 'from': f'{self.cell.designation}', 'to': f'{cell_to_move_to.designation}'}
+            if list(self.actions['move'].keys()) == [None]:
+                mvmnt_index = 0
+                self.actions['move'].update({0: {'direction': f'{list(_DIRECTION_MAP.keys())[self.cell.adjacent.index(cell_to_move_to.designation)]}', 'from': f'{self.cell.designation}', 'to': f'{cell_to_move_to.designation}'}})
+                del self.actions['move'][None]
+            else:
+                mvmnt_index = len(list(self.actions['move'].keys()))
+                self.actions['move'].update({mvmnt_index: {'direction': f'{list(_DIRECTION_MAP.keys())[self.cell.adjacent.index(cell_to_move_to.designation)]}', 'from': f'{self.cell.designation}', 'to': f'{cell_to_move_to.designation}'}})
+        elif not cell_to_move_to.passable:
+            print('Cell impassable')
+            return
         else:
             print('Invalid move')
             return
+        energy = self.move_energy
+        cost = self.cell.cost_out
         self.vacate()
         self.occupy(cell_to_move_to)
-        self._movements_remaining -= 1
-        return
+        cost += self.cell.cost_in
+        self.move_energy -= cost
+        print(f'Energy: {energy} - {cost} = {self.move_energy}')
+        return mvmnt_index
 
     def move_in_path(self, steps = None):
         if self.movement_queue != [] and self.traveling:
@@ -347,10 +355,9 @@ class GridEntity(AbstractGridEntity):
 
     def move_in_direction(self, direction):
         direction = _DIRECTION_MAP[direction] if direction not in _DIRECTION_MAP.values() else direction
-        #logger.entity(f'[{self.name}] MOVING IN DIRECTION: {direction}')
         destination = getattr(self.cell, direction)
         if destination is not None:
-            self.move(destination)
+            return self.move(destination)
 
     def refresh(self, dt):
         if self._movements_remaining > 0 and self.traveling:
@@ -361,3 +368,4 @@ class GridEntity(AbstractGridEntity):
                         
     def draw(self):
         pyglet.shapes.Rectangle(self.x, self.y, self.width, self.height, color=(255, 0, 0), batch=self.scene.main_batch)
+ 
