@@ -5,7 +5,7 @@ with open("README.md", "r") as file:
 
 setup(
     name='entyty',
-    version='0.0.42',
+    version='0.0.43',
     description='A Python library for creating and managing entities.',
     long_description=long_description,
     long_description_content_type="text/markdown",

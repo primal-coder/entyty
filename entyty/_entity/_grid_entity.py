@@ -311,6 +311,15 @@ class GridEntity(AbstractGridEntity):
         if self.move_energy <= 0:
             print('No energy remaining.')
             return None
+        if self.move_energy < self.cell.cost_out:
+            print(f'Not enough energy to move out of cell {cell.designation}.')
+            return None
+        elif self.move_energy < cell_to_move_to.cost_in:
+            print(f'Not enough energy to move into cell {cell.designation}.')
+            return None
+        elif self.move_energy < self.cell.cost_out + cell_to_move_to.cost_in:
+            print(f'Not enough energy to complete move from cell {self.cell.designation} to cell {cell_to_move_to.designation}.')
+            return None
         # idx = self.cell.adjacent.index([getattr(self.cell, f'{direction}') for direction in list(_DIRECTION_MAP.values()) if getattr(self.cell, f'{direction}') is cell_to_move_to][0].designation)
         if cell_to_move_to in [self.grid[cell] for cell in self.cell.adjacent]:
             if list(self.actions['move'].keys()) == [None]:
